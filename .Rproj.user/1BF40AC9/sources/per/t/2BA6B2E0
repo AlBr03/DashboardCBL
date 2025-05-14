@@ -1,9 +1,9 @@
 {
     "id": "2BA6B2E0",
-    "path": "C:/Users/20212545/OneDrive - TU Eindhoven/Study/Master Year 1/Q4/0HM400 CBL/Gitdir/app.R",
-    "project_path": "app.R",
+    "path": "C:/Users/20212545/OneDrive - TU Eindhoven/Study/Master Year 1/Q4/0HM400 CBL/Gitdir/DashboardCBL/app1.R",
+    "project_path": "app1.R",
     "type": "r_source",
-    "hash": "1669447796",
+    "hash": "664871145",
     "contents": "",
     "dirty": false,
     "created": 1746783184401.0,
@@ -12,15 +12,16 @@
     "properties": {
         "source_window_id": "",
         "Source": "Source",
-        "cursorPosition": "96,14",
-        "scrollLine": "85"
+        "cursorPosition": "0,0",
+        "scrollLine": "0",
+        "docOutlineVisible": "0"
     },
     "folds": "",
-    "lastKnownWriteTime": 1746784216,
+    "lastKnownWriteTime": 1747228667,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1746784216583,
+    "last_content_update": 1747228667,
     "read_only": false,
     "read_only_alternatives": []
 }

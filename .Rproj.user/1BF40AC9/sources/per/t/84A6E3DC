@@ -1,6 +1,6 @@
 {
     "id": "84A6E3DC",
-    "path": "C:/Users/20212545/OneDrive - TU Eindhoven/Study/Master Year 1/Q4/0HM400 CBL/Gitdir/app_example.R",
+    "path": "C:/Users/20212545/OneDrive - TU Eindhoven/Study/Master Year 1/Q4/0HM400 CBL/Gitdir/DashboardCBL/app_example.R",
     "project_path": "app_example.R",
     "type": "r_source",
     "hash": "2490328711",
@@ -12,8 +12,8 @@
     "properties": {
         "source_window_id": "",
         "Source": "Source",
-        "cursorPosition": "261,20",
-        "scrollLine": "243"
+        "cursorPosition": "188,4",
+        "scrollLine": "185"
     },
     "folds": "",
     "lastKnownWriteTime": 1746783172,
