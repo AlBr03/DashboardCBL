@@ -1,4 +1,6 @@
 # DashboardCBL
+MAKE SURE TO CHANGE TOKEN TO YOUR PERSONAL TOKEN EVERYTIME AFTER PULLING
+
  find all the R files and stuff that we need for the dashboard
 
  app_example.R contains the original dashboard example we received
