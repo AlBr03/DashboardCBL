@@ -3,6 +3,7 @@ library(dplyr)
 library(DBI)
 library(ggplot2)
 library(plotly)
+library(bslib)
 
 # Cached reactive values
 cachedUserData <- reactiveVal(NULL)
