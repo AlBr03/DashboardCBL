@@ -75,14 +75,12 @@ ui <- page_fillable(
     width = 1/2,
     card(card_header("Card 1: User Greeting"),
          textOutput("selectedUserId")),
-    card(card_header("Card 2: Selected Course ID"),
-         textOutput("display")),
+    card(card_header("Card 2: used for debugging for now"),
+         uiOutput("submitTime")),
     card(card_header("Card 3: piechart quiz progression"),
          plotlyOutput("pieChart", height = "400px")),
     card(card_header("Card 4: avatar"),
-         div(tags$img(src = "https://i.kym-cdn.com/photos/images/original/002/897/911/6ff",
-                  height = "200px", width = "auto"),
-         tags$p("Your personal avatar is 'just a chill guy'")))
+         uiOutput("quizScore"))
   )
 )
 
@@ -138,6 +136,85 @@ server <- function(input, output, session) {
     ) %>% layout(title = "Quiz Progress")
   })
   
+  # Draft for early bird badge (currently only for assignment 1 but easy to extend)
+  output$submitTime <- renderUI({
+    course_id_value <- "28301"
+    user_id_value <- cachedUserData()
+    
+    result4 <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_submissions")) %>%
+      filter(course_id == course_id_value, user_id == user_id_value, assignment_id == 127709) %>%
+      select(submitted_at_anonymous) %>%
+      head(1) %>%
+      collect()
+    submitted_time <- result4$submitted_at_anonymous
+    
+    result5 <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_quizzes")) %>%
+      filter(course_id == course_id_value, assignment_id == 127709) %>%
+      select(due_at) %>%
+      head(1) %>%
+      collect()
+    due_time <- result5$due_at
+    
+    finished_day_before <- substr(due_time, 1, 10) == substr(submitted_time, 1, 10)
+    badge <- if(finished_day_before){
+      "https://files.123freevectors.com/wp-content/original/33661-sad-face-emoticon.jpg"
+    } else {
+      "http://pluspng.com/img-png/png-smiling-face-smiley-png-3896.png"
+    }
+    
+    HTML(paste0("<div style='background-color: #88ff88; padding: 10px;'>",
+                due_time, "<br>", submitted_time, "<br>", finished_day_before,
+                "<img src=", badge,"
+                alt='Descriptive Text' 
+                style='max-width:100px; display:block; margin-bottom:10px;'>",
+                "</div>"))
+  })
+  
+  #draft for quiz master badge
+  output$quizScore <- renderUI({
+    course_id_value <- "28301"
+    user_id_value <- cachedUserData()
+    
+    result6 <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_submissions")) %>%
+      filter(course_id == course_id_value, user_id == user_id_value, assignment_id == 127733) %>%
+      select(score_anonymous) %>%
+      head(1) %>%
+      collect()
+    score_1 <- result6$score_anonymous
+    
+    result7 <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_submissions")) %>%
+      filter(course_id == course_id_value, user_id == user_id_value, assignment_id == 127729) %>%
+      select(score_anonymous) %>%
+      head(1) %>%
+      collect()
+    score_2 <- result7$score_anonymous
+    
+    result8 <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_submissions")) %>%
+      filter(course_id == course_id_value, user_id == user_id_value, assignment_id == 127735) %>%
+      select(score_anonymous) %>%
+      head(1) %>%
+      collect()
+    score_3 <- result8$score_anonymous
+    
+    scored_high <- if(score_1 + score_2 + score_3 >= 12){
+      TRUE
+    } else {
+      FALSE
+    }
+    
+    badge <- if(!scored_high){
+      "https://files.123freevectors.com/wp-content/original/33661-sad-face-emoticon.jpg"
+    } else {
+      "http://pluspng.com/img-png/png-smiling-face-smiley-png-3896.png"
+    }
+    
+    HTML(paste0("<div style='background-color: #88ff88; padding: 10px;'>",
+                score_1, "<br>", score_2, "<br>", score_3, "<br>", scored_high,
+                "<img src=", badge,"
+                alt='Descriptive Text' 
+                style='max-width:100px; display:block; margin-bottom:10px;'>",
+                "</div>"))
+  })
 }
 
 shinyApp(ui = ui, server = server)
