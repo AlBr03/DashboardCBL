@@ -73,13 +73,13 @@ ui <- page_fillable(
   "Thinking and Deciding 0HV60 Dashboard", 
   layout_column_wrap(
     width = 1/2,
-    card(card_header("Card 1: User Greeting"),
-         textOutput("selectedUserId")),
+    card(card_header("Card 1: Todolist?"),
+         uiOutput("todo")),
     card(card_header("Card 2: used for debugging for now"),
          uiOutput("submitTime")),
     card(card_header("Card 3: piechart quiz progression"),
          plotlyOutput("pieChart", height = "400px")),
-    card(card_header("Card 4: avatar"),
+    card(card_header("Card 4: quizscore badge draft"),
          uiOutput("quizScore"))
   )
 )
@@ -146,21 +146,26 @@ server <- function(input, output, session) {
       select(submitted_at_anonymous) %>%
       head(1) %>%
       collect()
-    submitted_time <- result4$submitted_at_anonymous
+    submitted_time <- if(nrow(result4) > 0) result4$submitted_at_anonymous else NA
     
     result5 <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_quizzes")) %>%
       filter(course_id == course_id_value, assignment_id == 127709) %>%
       select(due_at) %>%
       head(1) %>%
       collect()
-    due_time <- result5$due_at
+    due_time <- if(nrow(result5) > 0) result5$due_at else NA
     
-    finished_day_before <- substr(due_time, 1, 10) == substr(submitted_time, 1, 10)
-    badge <- if(finished_day_before){
-      "https://files.123freevectors.com/wp-content/original/33661-sad-face-emoticon.jpg"
-    } else {
-      "http://pluspng.com/img-png/png-smiling-face-smiley-png-3896.png"
-    }
+    if (!is.na(submitted_time) && !is.na(due_time)){
+      finished_day_before <- substr(due_time, 1, 10) == substr(submitted_time, 1, 10)
+      badge <- if(finished_day_before){
+        "https://files.123freevectors.com/wp-content/original/33661-sad-face-emoticon.jpg"
+      } else {
+        "http://pluspng.com/img-png/png-smiling-face-smiley-png-3896.png"
+      }} else {
+        finished_day_before <- TRUE
+        submitted_time <- "not handed in"
+        badge <- "https://files.123freevectors.com/wp-content/original/33661-sad-face-emoticon.jpg" 
+      }
     
     HTML(paste0("<div style='background-color: #88ff88; padding: 10px;'>",
                 due_time, "<br>", submitted_time, "<br>", finished_day_before,
@@ -180,21 +185,21 @@ server <- function(input, output, session) {
       select(score_anonymous) %>%
       head(1) %>%
       collect()
-    score_1 <- result6$score_anonymous
+    score_1 <- if (nrow(result6) > 0) result6$score_anonymous else 0
     
     result7 <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_submissions")) %>%
       filter(course_id == course_id_value, user_id == user_id_value, assignment_id == 127729) %>%
       select(score_anonymous) %>%
       head(1) %>%
       collect()
-    score_2 <- result7$score_anonymous
+    score_2 <- if (nrow(result7) > 0) result7$score_anonymous else 0
     
     result8 <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_submissions")) %>%
       filter(course_id == course_id_value, user_id == user_id_value, assignment_id == 127735) %>%
       select(score_anonymous) %>%
       head(1) %>%
       collect()
-    score_3 <- result8$score_anonymous
+    score_3 <- if (nrow(result8) > 0) result8$score_anonymous else 0
     
     scored_high <- if(score_1 + score_2 + score_3 >= 12){
       TRUE
@@ -214,6 +219,73 @@ server <- function(input, output, session) {
                 alt='Descriptive Text' 
                 style='max-width:100px; display:block; margin-bottom:10px;'>",
                 "</div>"))
+  })
+  
+  #draft for todo list
+  output$todo <- renderUI({
+    course_id_value <- "28301"
+    user_id_value <- cachedUserData()
+  
+    quizzes_with_status <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_quizzes")) %>%
+      filter(course_id == course_id_value, !is.na(due_at)) %>%
+      select(title, due_at, assignment_id) %>%
+      left_join(
+        tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_submissions")) %>%
+          filter(user_id == user_id_value) %>%
+          select(assignment_id, assignment_title),
+        by = "assignment_id"
+      ) %>%
+      arrange(due_at) %>%
+      collect()
+    
+    if(!exists("checkbox_states", envir = .GlobalEnv)) {
+      checkbox_states <<- reactiveValues()
+    }
+    
+    
+    # Create UI elements for each assignment
+    quiz_ui_list <- lapply(seq_len(nrow(quizzes_with_status)), function(i) {
+      row <- quizzes_with_status[i, ]
+      aid <- as.character(row$assignment_id)
+      
+      # Initialize checkbox state if not yet set
+      if (is.null(checkbox_states[[aid]])) {
+        checkbox_states[[aid]] <- !is.na(row$assignment_title)
+      }
+      
+      # Apply strikethrough conditionally
+      title_display <- if (checkbox_states[[aid]]) {
+        paste0("<span style='text-decoration: line-through;'>", row$title, "</span>")
+      } else {
+        row$title
+      }
+      
+      # Create checkbox + label
+      fluidRow(
+        column(1,
+               checkboxInput(inputId = paste0("checkbox_", aid),
+                             label = NULL,
+                             value = checkbox_states[[aid]])),
+        column(11,
+               HTML(paste0("<div>", title_display, " (Due: ", row$due_at, ")</div>"))
+        )
+      )
+    })
+    
+    # Return all quiz UI components
+    do.call(tagList, quiz_ui_list)
+  })
+  
+  # Update checkbox_states when any checkbox is clicked
+  observe({
+    isolate({
+      for (aid in names(checkbox_states)) {
+        input_id <- paste0("checkbox_", aid)
+        if (!is.null(input[[input_id]])) {
+          checkbox_states[[aid]] <- input[[input_id]]
+        }
+      }
+    })
   })
 }
 
