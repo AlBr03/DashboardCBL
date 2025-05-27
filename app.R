@@ -153,18 +153,26 @@ server <- function(input, output, session) {
     ) %>% layout(title = "Quiz Progress")
   })
   
+  #badges
   output$badge <- renderUI({
     user_id_value <- cachedUserData()
-    if (is.null(user_id_value)) return("Loading...")
+  
     
-    df <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_submissions")) %>%
-      filter(course_id == !!course_id, user_id == user_id_value) %>%
-      select(submitted_at_anonymous) %>%
+    #badge for completing all quizzes
+    result3 <- quiz_progression %>%
+      filter(user_id == user_id_value, course_id == !!course_id) %>%
+      select(nr_submissions, nr_quizzes) %>%
+      head(1) %>%
       collect()
     
-    all_done <- all(!is.na(df$submitted_at_anonymous))
+    if (nrow(result3) == 0) {
+      return(NULL)  # Return NULL to show no plot
+    }
     
-    if (all_done) {
+    done <- result3$nr_submissions
+    todo <- result3$nr_quizzes - done
+    
+    if (todo == 0) {
       badge_url <- "https://img.icons8.com/emoji/96/000000/star-emoji.png"
       HTML(paste0("<div style='text-align:center;'><img src='", badge_url, "' height='80'><br><strong>Quiz Star!</strong><br>All quizzes done! 🎉</div>"))
     } else {
