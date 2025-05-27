@@ -69,20 +69,37 @@ weblogs_chart <- weblogs %>%
   group_by(course_id, user_id, date, item) %>%
   summarise(count = n(), .groups = "drop")
 
-ui <- page_fillable(
-  "Thinking and Deciding 0HV60 Dashboard", 
-  layout_column_wrap(
-    width = 1/2,
-    card(card_header("Card 1: Todolist?"),
-         uiOutput("todo")),
-    card(card_header("Card 2: used for debugging for now"),
-         uiOutput("submitTime")),
-    card(card_header("Card 3: piechart quiz progression"),
-         plotlyOutput("pieChart", height = "400px")),
-    card(card_header("Card 4: quizscore badge draft"),
-         uiOutput("quizScore"))
+ui <- fluidPage(
+  theme = bs_theme(bootswatch = "minty", base_font = font_google("Nunito")),
+  titlePanel("🎓 Thinking and Deciding Dashboard"),
+  fluidRow(
+    column(6,
+           card(
+             card_header("📝 To-Do List (Quizzes with Due Dates)"),
+             uiOutput("todo")
+           )
+    ),
+    column(6,
+           card(
+             card_header("📊 Quiz Completion Progress"),
+             plotlyOutput("pieChart", height = "300px")
+           )
+    )
+  ),
+  fluidRow(
+    column(6,
+           card(
+             card_header("🏆 Achievement Badge"),
+             uiOutput("badge")
+           )
+    ),
+    column(6,
+           card(
+             card_header("📅 Time Estimate (Mock)"),
+             uiOutput("submitTime")
+    )
   )
-)
+))
 
 server <- function(input, output, session) {
   course_id <- 28301 #locked on thinking and deciding 0HV60
@@ -135,6 +152,26 @@ server <- function(input, output, session) {
       marker = list(colors = c("green", "red"))
     ) %>% layout(title = "Quiz Progress")
   })
+  
+  output$badge <- renderUI({
+    user_id_value <- cachedUserData()
+    if (is.null(user_id_value)) return("Loading...")
+    
+    df <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_submissions")) %>%
+      filter(course_id == !!course_id, user_id == user_id_value) %>%
+      select(submitted_at_anonymous) %>%
+      collect()
+    
+    all_done <- all(!is.na(df$submitted_at_anonymous))
+    
+    if (all_done) {
+      badge_url <- "https://img.icons8.com/emoji/96/000000/star-emoji.png"
+      HTML(paste0("<div style='text-align:center;'><img src='", badge_url, "' height='80'><br><strong>Quiz Star!</strong><br>All quizzes done! 🎉</div>"))
+    } else {
+      NULL
+    }
+  })
+  
   
   # Draft for early bird badge (currently only for assignment 1 but easy to extend)
   output$submitTime <- renderUI({

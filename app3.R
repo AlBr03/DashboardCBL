@@ -6,6 +6,31 @@ library(ggplot2)
 library(plotly)
 library(bslib)
 
+cachedUserData <- reactiveVal(NULL)
+
+getUserData <- function(course_id) {
+  # For development purposes we wish to see a user that has submitted a quiz (27974 has no quizzes)
+  data <- quiz_progression %>%
+    filter(course_id == !!course_id) %>%
+    collect()
+  
+  # Check if data is empty before proceeding
+  if (nrow(data) == 0) {
+    # If no data found for quiz progression, look up enrollment data
+    data <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_enrollments")) %>%
+      filter(course_id == !!course_id, enrollment_type == "StudentEnrollment") %>%
+      collect()
+  }
+  
+  # Check if user_id is available in either dataset
+  if (nrow(data) > 0) {
+    user_id <- sample(data$user_id, 1)
+    return(user_id)
+  } else {
+    return(NULL)  # If no users found, return NULL
+  }
+}
+
 # Connect to database (assumes sc is already set in connect.R)
 quizzes <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_quizzes")) %>%
   rename(quiz_id = id)
@@ -17,6 +42,43 @@ valid_quizzes <- quizzes %>%
   filter(workflow_state == "available", !is.na(due_at)) %>%
   left_join(submissions, by = c("assignment_id" = "assignment_id", "course_id" = "course_id")) %>%
   distinct(quiz_id, course_id, user_id, title, due_at, assignment_id, submitted_at_anonymous)
+
+quizzes <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_quizzes")) %>%
+  rename(quiz_id = id)
+
+submissions <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_quiz_submissions"))
+weblogs <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_web_logs"))
+
+total_quizzes <- quizzes %>%
+  filter(workflow_state == "available") %>%
+  group_by(course_id) %>%
+  summarise(nr_quizzes = n())
+
+quiz_progression <- quizzes %>%
+  inner_join(total_quizzes, by = "course_id") %>%
+  inner_join(submissions, by = c("quiz_id" = "quiz_id", "course_id" = "course_id")) %>%
+  group_by(course_id, user_id) %>%
+  summarise(
+    nr_submissions = n_distinct(quiz_id),
+    nr_quizzes = max(nr_quizzes),
+    .groups = "drop"
+  )
+
+weblogs_chart <- weblogs %>%
+  mutate(
+    date = substr(timestamp, 1, 10),
+    item = case_when(
+      grepl("file", web_application_controller) ~ "files",
+      grepl("quizzes", web_application_controller) ~ "quizzes",
+      grepl("wiki_pages", web_application_controller) ~ "wiki_pages",
+      grepl("module", web_application_controller) ~ "modules",
+      grepl("discussion", web_application_controller) ~ "discussions",
+      grepl("grade", web_application_controller) ~ "grades",
+      TRUE ~ "other"
+    )
+  ) %>%
+  group_by(course_id, user_id, date, item) %>%
+  summarise(count = n(), .groups = "drop")
 
 # UI
 ui <- fluidPage(
@@ -46,6 +108,7 @@ ui <- fluidPage(
     column(6,
            card(
              card_header("📅 Time Estimate (Mock)"),
+             textOutput("selectedUserId"),
              HTML("<p>🔜 Predictive features coming in Sprint 3!</p>")
            )
     )
@@ -54,16 +117,27 @@ ui <- fluidPage(
 
 # Server
 server <- function(input, output, session) {
-  course_id <- 28301
-  user_id <- reactiveVal(NULL)
+  course_id <- 28301 #locked on thinking and deciding 0HV60
+  
+  observe({
+    isolate({
+      user_id <- getUserData("28301")  # Pass the fixed Course ID
+      cachedUserData(user_id)          # Cache the user ID
+    })
+  })
   
   observe({
     sampled <- valid_quizzes %>% filter(course_id == !!course_id) %>% collect()
     if (nrow(sampled) > 0) user_id(sample(sampled$user_id, 1))
   })
   
+  # Output: selected user welcome
+  output$selectedUserId <- renderText({
+      paste("Welcome", cachedUserData(), "!")
+  })
+  
   output$todo <- renderUI({
-    uid <- user_id()
+    uid <- cachedUserData()
     if (is.null(uid)) return("Loading...")
     
     data <- valid_quizzes %>%
@@ -121,7 +195,7 @@ server <- function(input, output, session) {
   })
   
   output$pieChart <- renderPlotly({
-    uid <- user_id()
+    uid <- cachedUserData()
     if (is.null(uid)) return(NULL)
     
     df <- valid_quizzes %>%
@@ -141,7 +215,7 @@ server <- function(input, output, session) {
   })
   
   output$badge <- renderUI({
-    uid <- user_id()
+    uid <- cachedUserData()
     if (is.null(uid)) return("Loading...")
     
     df <- valid_quizzes %>%
