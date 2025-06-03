@@ -73,33 +73,48 @@ ui <- fluidPage(
   theme = bs_theme(bootswatch = "minty", base_font = font_google("Nunito")),
   titlePanel("🎓 Thinking and Deciding Dashboard"),
   fluidRow(
-    column(6,
+    column(7,
            card(
              card_header("📝 To-Do List (Quizzes with Due Dates)"),
-             uiOutput("todo")
+             uiOutput("todoV2")
            )
     ),
-    column(6,
+    column(5,
            card(
-             card_header("📊 Quiz Completion Progress"),
-             plotlyOutput("pieChart", height = "300px")
+             card_header("👤 Personal Avatar"),
+             tags$img(src = "avatar.png", height = "120px"),
+             p("Earn badges to unlock accessories!"),
+             tags$div(
+               tags$img(src = "badge1.png", height = "30px"),
+               tags$img(src = "badge2.png", height = "30px"),
+               tags$img(src = "badge3.png", height = "30px"),
+               tags$img(src = "badge4.png", height = "30px"),
+               tags$img(src = "badge5.png", height = "30px")
+             )
            )
     )
   ),
   fluidRow(
-    column(6,
+    column(4,
+           card(
+             card_header("📊 Quiz Completion Progress"),
+             plotlyOutput("pieChart", height = "300px")
+           )
+    ),
+    column(4,
            card(
              card_header("🏆 Achievement Badge"),
              uiOutput("badge")
            )
     ),
-    column(6,
+    column(4,
            card(
-             card_header("📅 Time Estimate (Mock)"),
-             uiOutput("submitTime")
+             card_header("📊 Grade overview"),
+             plotlyOutput("lineChart", height = "300px")
     )
   )
 ))
+
 
 server <- function(input, output, session) {
   course_id <- 28301 #locked on thinking and deciding 0HV60
@@ -126,6 +141,49 @@ server <- function(input, output, session) {
     }
   })
   
+  # line graph of grades ##TODO: sort by due date and normalize to a grade from 0-10
+  output$lineChart <- renderPlotly({
+    user_id_value <- cachedUserData()
+    course_id_value <- "28301"
+    
+    if (is.null(user_id_value)) return(NULL)
+    
+    # Fetch scores, excluding specific quiz IDs
+    user_scores <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_quiz_submissions")) %>%
+      filter(user_id == user_id_value, course_id == course_id_value) %>%
+      filter(!quiz_id %in% c(26608, 26581)) %>%
+      select(quiz_id, quiz_title, score_anonymous) %>%
+      collect() %>%
+      group_by(quiz_title) %>%
+      summarise(score_anonymous = max(score_anonymous, na.rm = TRUE)) %>%
+      arrange(quiz_title)
+    
+    if (nrow(user_scores) == 0 || all(is.na(user_scores$score_anonymous))) {
+      return(NULL)
+    }
+    
+    user_scores$score_anonymous <- as.numeric(user_scores$score_anonymous)
+    
+    # Line chart
+    plot_ly(
+      data = user_scores,
+      x = ~quiz_title,
+      y = ~score_anonymous,
+      type = 'scatter',
+      mode = 'lines+markers',
+      line = list(shape = "linear"),
+      marker = list(size = 8)
+    ) %>%
+      layout(
+        title = "Quiz Scores Over Time",
+        xaxis = list(title = "Quiz"),
+        yaxis = list(title = "Score", rangemode = "tozero")
+      )
+  })
+  
+  
+  
+
   # Output: pie chart of quiz progression
   output$pieChart <- renderPlotly({
     user_id_value <- cachedUserData()
@@ -173,6 +231,7 @@ server <- function(input, output, session) {
     todo <- result3$nr_quizzes - done
     
     if (todo == 0) {
+      quiz_master = TRUE
       badge_url <- "https://img.icons8.com/emoji/96/000000/star-emoji.png"
       HTML(paste0("<div style='text-align:center;'><img src='", badge_url, "' height='80'><br><strong>Quiz Star!</strong><br>All quizzes done! 🎉</div>"))
     } else {
@@ -206,6 +265,7 @@ server <- function(input, output, session) {
         "https://files.123freevectors.com/wp-content/original/33661-sad-face-emoticon.jpg"
       } else {
         "http://pluspng.com/img-png/png-smiling-face-smiley-png-3896.png"
+        early_bird = TRUE
       }} else {
         finished_day_before <- TRUE
         submitted_time <- "not handed in"
@@ -267,6 +327,62 @@ server <- function(input, output, session) {
   })
   
   #draft for todo list
+  output$todoV2 <- renderUI({
+    course_id_value <- "28301"
+    user_id_value <- cachedUserData()
+    
+    # Get user's completed submissions
+    user_submissions <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_quiz_submissions")) %>%
+      filter(course_id == course_id_value, user_id == user_id_value) %>%
+      select(quiz_title) %>%
+      distinct() %>%
+      collect()
+    
+    completed_titles <- user_submissions$quiz_title
+    
+    # Get all quizzes with due dates
+    quizzes_with_due <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_quiz_submissions")) %>%
+      filter(course_id == course_id_value) %>%
+      select(quiz_id, quiz_title) %>%
+      distinct() %>%
+      left_join(
+        tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_quizzes")),
+        by = c("quiz_title" = "title")
+      ) %>%
+      select(quiz_id, quiz_title, due_at) %>%
+      distinct(quiz_id, .keep_all = TRUE) %>%
+      arrange(is.na(due_at), due_at) %>%
+      collect()
+    
+    if (nrow(quizzes_with_due) == 0) {
+      return(HTML("<p>No quizzes found.</p>"))
+    }
+    
+    # Build the quiz list with strikethrough for completed quizzes
+    quiz_list <- lapply(seq_len(nrow(quizzes_with_due)), function(i) {
+      title <- quizzes_with_due$quiz_title[i]
+      due <- quizzes_with_due$due_at[i]
+      
+      # Check if user completed this quiz (by matching title)
+      completed <- title %in% completed_titles
+      
+      # Format due date
+      due_text <- if (!is.na(due)) {
+        paste(" (Due:", format(as.POSIXct(due, tz = "UTC"), "%b %d, %Y %H:%M"), ")")
+      } else {
+        " (No due date)"
+      }
+      
+      # Strike through if completed
+      display_title <- if (completed) tags$s(title) else title
+      
+      tags$li(HTML(paste0(as.character(display_title), due_text)))
+    })
+    
+    tags$ul(quiz_list)
+  })
+  
+  
   output$todo <- renderUI({
     course_id_value <- "28301"
     user_id_value <- cachedUserData()
@@ -275,10 +391,10 @@ server <- function(input, output, session) {
       filter(course_id == course_id_value, !is.na(due_at)) %>%
       select(title, due_at, assignment_id) %>%
       left_join(
-        tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_submissions")) %>%
+        tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_quiz_submissions")) %>%
           filter(user_id == user_id_value) %>%
-          select(assignment_id, assignment_title),
-        by = "assignment_id"
+          select(quiz_id, quiz_title),
+        by = c("assignment_id" = "quiz_id")
       ) %>%
       arrange(due_at) %>%
       collect()
@@ -318,7 +434,10 @@ server <- function(input, output, session) {
     })
     
     # Return all quiz UI components
-    do.call(tagList, quiz_ui_list)
+    div(
+      style = "max-height: 300px; overflow-y: auto; padding-right: 10px;",
+      do.call(tagList, quiz_ui_list)
+    )
   })
   
   # Update checkbox_states when any checkbox is clicked
