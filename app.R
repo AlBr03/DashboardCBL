@@ -148,38 +148,63 @@ server <- function(input, output, session) {
     
     if (is.null(user_id_value)) return(NULL)
     
-    # Fetch scores, excluding specific quiz IDs
+    # Fetch scores and timestamps
     user_scores <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_quiz_submissions")) %>%
       filter(user_id == user_id_value, course_id == course_id_value) %>%
       filter(!quiz_id %in% c(26608, 26581)) %>%
-      select(quiz_id, quiz_title, score_anonymous) %>%
+      select(quiz_id, quiz_title, score_anonymous, finished_at_anonymous) %>%
+      left_join(
+        tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_quizzes")) %>%
+          select(assignment_id, due_at),
+        by = c("quiz_id" = "assignment_id")
+      ) %>%
       collect() %>%
-      group_by(quiz_title) %>%
-      summarise(score_anonymous = max(score_anonymous, na.rm = TRUE)) %>%
-      arrange(quiz_title)
+      group_by(quiz_id, quiz_title, due_at, finished_at_anonymous) %>%
+      summarise(score_anonymous = max(score_anonymous, na.rm = TRUE), .groups = "drop") %>%
+      arrange(finished_at_anonymous)
     
     if (nrow(user_scores) == 0 || all(is.na(user_scores$score_anonymous))) {
       return(NULL)
     }
     
+    # Normalize scores to 0–10
     user_scores$score_anonymous <- as.numeric(user_scores$score_anonymous)
+    valid_scores <- user_scores %>% filter(!is.na(score_anonymous))
     
-    # Line chart
+    min_score <- min(valid_scores$score_anonymous, na.rm = TRUE)
+    max_score <- max(valid_scores$score_anonymous, na.rm = TRUE)
+    
+    if (min_score == max_score) {
+      user_scores$normalized_score <- 10
+    } else {
+      user_scores$normalized_score <- round(
+        (user_scores$score_anonymous - min_score) /
+          (max_score - min_score) * 10, 1
+      )
+    }
+    
+    # Sort x-axis by finished_at_anonymous
+    user_scores <- user_scores %>%
+      arrange(finished_at_anonymous) %>%
+      mutate(quiz_title = factor(quiz_title, levels = unique(quiz_title)))
+    
+    # Plot
     plot_ly(
       data = user_scores,
       x = ~quiz_title,
-      y = ~score_anonymous,
+      y = ~normalized_score,
       type = 'scatter',
       mode = 'lines+markers',
       line = list(shape = "linear"),
       marker = list(size = 8)
     ) %>%
       layout(
-        title = "Quiz Scores Over Time",
-        xaxis = list(title = "Quiz"),
-        yaxis = list(title = "Score", rangemode = "tozero")
+        title = "Normalized Quiz Scores Over Time",
+        yaxis = list(title = "Normalized Score (0–10)", rangemode = "tozero")
       )
   })
+  
+  
   
   
   
@@ -216,7 +241,7 @@ server <- function(input, output, session) {
     user_id_value <- cachedUserData()
   
     
-    #badge for completing all quizzes
+    #badge for completing all quizzes ## TODO use this for practice quizzes
     result3 <- quiz_progression %>%
       filter(user_id == user_id_value, course_id == !!course_id) %>%
       select(nr_submissions, nr_quizzes) %>%
