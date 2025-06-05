@@ -4,6 +4,7 @@ library(DBI)
 library(ggplot2)
 library(plotly)
 library(bslib)
+library(magick)
 
 # Cached reactive values
 cachedUserData <- reactiveVal(NULL)
@@ -82,15 +83,7 @@ ui <- fluidPage(
     column(5,
            card(
              card_header("👤 Personal Avatar"),
-             tags$img(src = "avatar.png", height = "120px"),
-             p("Earn badges to unlock accessories!"),
-             tags$div(
-               tags$img(src = "badge1.png", height = "30px"),
-               tags$img(src = "badge2.png", height = "30px"),
-               tags$img(src = "badge3.png", height = "30px"),
-               tags$img(src = "badge4.png", height = "30px"),
-               tags$img(src = "badge5.png", height = "30px")
-             )
+             uiOutput("avatar")
            )
     )
   ),
@@ -117,6 +110,27 @@ ui <- fluidPage(
 
 
 server <- function(input, output, session) {
+  
+  render_badge <- function(path, show_active, badge_name) {
+    img <- image_read(path)
+    if (!show_active) {
+      img <- image_fx(img, expression = "a*0.5", channel = "alpha")
+    }
+    
+    out_dir <- "www/badges"
+    dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+    
+    out_path <- file.path(out_dir, paste0(badge_name, "_badge.png"))
+    image_write(img, path = out_path)
+    
+    tags$img(
+      src = file.path("badges", paste0(badge_name, "_badge.png")),
+      style = "height: 30px; width: 30px; display: block; margin-bottom: 10px;"
+    )
+  }
+  
+  
+  
   course_id <- 28301 #locked on thinking and deciding 0HV60
   
   observe({
@@ -140,6 +154,7 @@ server <- function(input, output, session) {
       "Welcome, Guest!"
     }
   })
+
   
   # line graph of grades ##TODO: sort by due date and normalize to a grade from 0-10
   output$lineChart <- renderPlotly({
@@ -265,91 +280,66 @@ server <- function(input, output, session) {
   })
   
   
-  # Draft for early bird badge (currently only for assignment 1 but easy to extend)
-  output$submitTime <- renderUI({
+  # Draft for early bird badge
+  early_bird <- reactive({
     course_id_value <- "28301"
     user_id_value <- cachedUserData()
+    assignment_ids <- c(127733, 127729, 127735, 131000, 131001, 131002)
     
-    result4 <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_submissions")) %>%
-      filter(course_id == course_id_value, user_id == user_id_value, assignment_id == 127709) %>%
-      select(submitted_at_anonymous) %>%
-      head(1) %>%
-      collect()
-    submitted_time <- if(nrow(result4) > 0) result4$submitted_at_anonymous else NA
+    early_count <- 0
     
-    result5 <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_quizzes")) %>%
-      filter(course_id == course_id_value, assignment_id == 127709) %>%
-      select(due_at) %>%
-      head(1) %>%
-      collect()
-    due_time <- if(nrow(result5) > 0) result5$due_at else NA
-    
-    if (!is.na(submitted_time) && !is.na(due_time)){
-      finished_day_before <- substr(due_time, 1, 10) == substr(submitted_time, 1, 10)
-      badge <- if(finished_day_before){
-        "https://files.123freevectors.com/wp-content/original/33661-sad-face-emoticon.jpg"
-      } else {
-        "http://pluspng.com/img-png/png-smiling-face-smiley-png-3896.png"
-        early_bird = TRUE
-      }} else {
-        finished_day_before <- TRUE
-        submitted_time <- "not handed in"
-        badge <- "https://files.123freevectors.com/wp-content/original/33661-sad-face-emoticon.jpg" 
+    for (assignment_id in assignment_ids) {
+      # Get submitted time
+      submitted <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_submissions")) %>%
+        filter(course_id == course_id_value, user_id == user_id_value, assignment_id == assignment_id) %>%
+        select(submitted_at_anonymous) %>%
+        head(1) %>%
+        collect()
+      
+      # Get due time
+      due <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_quizzes")) %>%
+        filter(course_id == course_id_value, assignment_id == assignment_id) %>%
+        select(due_at) %>%
+        head(1) %>%
+        collect()
+      
+      if (nrow(submitted) > 0 && nrow(due) > 0) {
+        submitted_date <- as.Date(submitted$submitted_at_anonymous)
+        due_date <- as.Date(due$due_at)
+        
+        if (!is.na(submitted_date) && !is.na(due_date)) {
+          if (submitted_date == (due_date - 1)) {
+            early_count <- early_count + 1
+          }
+        }
       }
+    }
     
-    HTML(paste0("<div style='background-color: #88ff88; padding: 10px;'>",
-                due_time, "<br>", submitted_time, "<br>", finished_day_before,
-                "<img src=", badge,"
-                alt='Descriptive Text' 
-                style='max-width:100px; display:block; margin-bottom:10px;'>",
-                "</div>"))
+    # Return TRUE if at least 3 early submissions
+    early_count >= 3
   })
   
+  
+  
   #draft for quiz master badge
-  output$quizScore <- renderUI({
+  scored_high <- reactive({
     course_id_value <- "28301"
     user_id_value <- cachedUserData()
     
-    result6 <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_submissions")) %>%
-      filter(course_id == course_id_value, user_id == user_id_value, assignment_id == 127733) %>%
-      select(score_anonymous) %>%
-      head(1) %>%
-      collect()
-    score_1 <- if (nrow(result6) > 0) result6$score_anonymous else 0
+    score_ids <- c(26615, 26610, 26617, 27282, 27283, 27284)
     
-    result7 <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_submissions")) %>%
-      filter(course_id == course_id_value, user_id == user_id_value, assignment_id == 127729) %>%
-      select(score_anonymous) %>%
-      head(1) %>%
-      collect()
-    score_2 <- if (nrow(result7) > 0) result7$score_anonymous else 0
+    scores <- lapply(score_ids, function(quiz_id) {
+      result <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_quiz_submissions")) %>%
+        filter(course_id == course_id_value, user_id == user_id_value, quiz_id == quiz_id) %>%
+        select(score_anonymous) %>%
+        head(1) %>%
+        collect()
+      if (nrow(result) > 0) result$score_anonymous else 0
+    })
     
-    result8 <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_submissions")) %>%
-      filter(course_id == course_id_value, user_id == user_id_value, assignment_id == 127735) %>%
-      select(score_anonymous) %>%
-      head(1) %>%
-      collect()
-    score_3 <- if (nrow(result8) > 0) result8$score_anonymous else 0
-    
-    scored_high <- if(score_1 + score_2 + score_3 >= 12){
-      TRUE
-    } else {
-      FALSE
-    }
-    
-    badge <- if(!scored_high){
-      "https://files.123freevectors.com/wp-content/original/33661-sad-face-emoticon.jpg"
-    } else {
-      "http://pluspng.com/img-png/png-smiling-face-smiley-png-3896.png"
-    }
-    
-    HTML(paste0("<div style='background-color: #88ff88; padding: 10px;'>",
-                score_1, "<br>", score_2, "<br>", score_3, "<br>", scored_high,
-                "<img src=", badge,"
-                alt='Descriptive Text' 
-                style='max-width:100px; display:block; margin-bottom:10px;'>",
-                "</div>"))
+    sum(unlist(scores)) >= 27
   })
+  
   
   #draft for todo list
   output$todoV2 <- renderUI({
@@ -476,6 +466,19 @@ server <- function(input, output, session) {
       }
     })
   })
+  
+  #Avatar section functionalities
+  output$avatar <- renderUI({
+    tagList(
+      render_badge("www/Images/1.png", show_active = scored_high(), badge_name = "quiz"),
+      render_badge("www/Images/2.png", show_active = FALSE, badge_name = "engagement"),
+      render_badge("www/Images/3.png", show_active = early_bird(), badge_name = "earlybird"),
+      render_badge("www/Images/4.png", show_active = FALSE, badge_name = "practice"),
+      render_badge("www/Images/5.png", show_active = FALSE, badge_name = "conversation")
+    )
+  })
+  
+  
 }
 
 shinyApp(ui = ui, server = server)
