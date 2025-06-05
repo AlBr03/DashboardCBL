@@ -192,8 +192,8 @@ server <- function(input, output, session) {
       select(quiz_id, quiz_title, score_anonymous, finished_at_anonymous) %>%
       left_join(
         tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_quizzes")) %>%
-          select(assignment_id, due_at),
-        by = c("quiz_id" = "assignment_id")
+          select(title, due_at),
+        by = c("quiz_title" = "title")
       ) %>%
       collect() %>%
       group_by(quiz_id, quiz_title, due_at, finished_at_anonymous) %>%
