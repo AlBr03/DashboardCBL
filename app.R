@@ -96,25 +96,46 @@ ui <- fluidPage(
     ),
     column(4,
            card(
-             card_header("🏆 Achievement Badge"),
-             uiOutput("badge")
+             card_header("📊 Grade overview"),
+             plotlyOutput("lineChart", height = "300px")
            )
     ),
     column(4,
            card(
-             card_header("📊 Grade overview"),
-             plotlyOutput("lineChart", height = "300px")
+             card_header("🏆 Explanation of the badges"),
+             uiOutput("badge_list")
+           )
     )
   )
-))
+)
 
 
 server <- function(input, output, session) {
+  output$badge_list <- renderUI({
+    badges <- list(
+      list(img = "Images/1.png", label = "Verkennen van het probleem"),
+      list(img = "Images/2.png", label = "Vooruit plannen"),
+      list(img = "Images/3.png", label = "Experimenteren"),
+      list(img = "Images/4.png", label = "Reflecteren"),
+      list(img = "Images/5.png", label = "Verdiepen")
+    )
+    
+    tagList(
+      lapply(badges, function(badge) {
+        tags$div(
+          style = "margin-bottom: 20px; text-align: center;",
+          tags$img(src = badge$img, height = "80px", style = "margin-bottom: 10px;"),
+          tags$p(badge$label, style = "margin: 0; font-weight: bold;")
+        )
+      })
+    )
+  })
+  
   
   render_badge <- function(path, show_active, badge_name) {
     img <- image_read(path)
     if (!show_active) {
-      img <- image_fx(img, expression = "a*0.5", channel = "alpha")
+      img <- image_fx(img, expression = "a*0.2", channel = "alpha")
     }
     
     out_dir <- "www/badges"
@@ -125,7 +146,7 @@ server <- function(input, output, session) {
     
     tags$img(
       src = file.path("badges", paste0(badge_name, "_badge.png")),
-      style = "height: 30px; width: 30px; display: block; margin-bottom: 10px;"
+      style = "height: 60px; width: 60px; display: block; margin-bottom: 10px;"
     )
   }
   
@@ -251,33 +272,23 @@ server <- function(input, output, session) {
     ) %>% layout(title = "Quiz Progress")
   })
   
-  #badges
-  output$badge <- renderUI({
+  #practice badge
+  quiz_star <- reactive({
+    required_ids <- c(26585, 26594, 26596, 26584, 26618)
+    course_id_value <- "28301"
     user_id_value <- cachedUserData()
-  
     
-    #badge for completing all quizzes ## TODO use this for practice quizzes
-    result3 <- quiz_progression %>%
-      filter(user_id == user_id_value, course_id == !!course_id) %>%
-      select(nr_submissions, nr_quizzes) %>%
-      head(1) %>%
+    user_submissions <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_quiz_submissions")) %>%
+      filter(course_id == course_id_value, user_id == user_id_value) %>%
+      select(quiz_id) %>%
+      distinct() %>%
       collect()
     
-    if (nrow(result3) == 0) {
-      return(NULL)  # Return NULL to show no plot
-    }
-    
-    done <- result3$nr_submissions
-    todo <- result3$nr_quizzes - done
-    
-    if (todo == 0) {
-      quiz_master = TRUE
-      badge_url <- "https://img.icons8.com/emoji/96/000000/star-emoji.png"
-      HTML(paste0("<div style='text-align:center;'><img src='", badge_url, "' height='80'><br><strong>Quiz Star!</strong><br>All quizzes done! 🎉</div>"))
-    } else {
-      NULL
-    }
+    completed_ids <- user_submissions$quiz_id
+    all(required_ids %in% completed_ids)
   })
+  
+  
   
   
   # Draft for early bird badge
@@ -316,7 +327,7 @@ server <- function(input, output, session) {
     }
     
     # Return TRUE if at least 3 early submissions
-    early_count >= 3
+    early_count >= 1
   })
   
   
@@ -337,7 +348,7 @@ server <- function(input, output, session) {
       if (nrow(result) > 0) result$score_anonymous else 0
     })
     
-    sum(unlist(scores)) >= 27
+    sum(unlist(scores)) >= 20
   })
   
   
@@ -469,11 +480,12 @@ server <- function(input, output, session) {
   
   #Avatar section functionalities
   output$avatar <- renderUI({
-    tagList(
+    tags$div(
+      style = "display: flex; gap: 20px; align-items: center;",
       render_badge("www/Images/1.png", show_active = scored_high(), badge_name = "quiz"),
       render_badge("www/Images/2.png", show_active = FALSE, badge_name = "engagement"),
       render_badge("www/Images/3.png", show_active = early_bird(), badge_name = "earlybird"),
-      render_badge("www/Images/4.png", show_active = FALSE, badge_name = "practice"),
+      render_badge("www/Images/4.png", show_active = quiz_star(), badge_name = "practice"),
       render_badge("www/Images/5.png", show_active = FALSE, badge_name = "conversation")
     )
   })
