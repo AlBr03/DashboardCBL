@@ -113,19 +113,20 @@ ui <- fluidPage(
 server <- function(input, output, session) {
   output$badge_list <- renderUI({
     badges <- list(
-      list(img = "Images/1.png", label = "Verkennen van het probleem"),
-      list(img = "Images/2.png", label = "Vooruit plannen"),
-      list(img = "Images/3.png", label = "Experimenteren"),
-      list(img = "Images/4.png", label = "Reflecteren"),
-      list(img = "Images/5.png", label = "Verdiepen")
+      list(label = "Collect badges to earn cool accessories for your avatar"),
+      list(img = "Images/1.png", label = "Achieve this badge by scoring more than 20 points over the graded quizzes!"),
+      list(img = "Images/2.png", label = "Achieve this badge by completing at least one of the workshop preparations (more than) a day before the deadline!"),
+      list(img = "Images/3.png", label = "Achieve this badge by submitting x of your quizzes a day early!"),
+      list(img = "Images/4.png", label = "Achieve this badge by completing all the practice quizzes!"),
+      list(img = "Images/5.png", label = "Achieve this badge by starting a conversation!")
     )
     
     tagList(
       lapply(badges, function(badge) {
         tags$div(
-          style = "margin-bottom: 20px; text-align: center;",
-          tags$img(src = badge$img, height = "80px", style = "margin-bottom: 10px;"),
-          tags$p(badge$label, style = "margin: 0; font-weight: bold;")
+          style = "display: flex; align-items: center; margin-bottom: 1px;",
+          tags$img(src = badge$img, height = "50px", style = "margin-right: 20px;"),
+          tags$span(badge$label, style = "font-weight: bold; font-size: 14px;")
         )
       })
     )
@@ -295,7 +296,7 @@ server <- function(input, output, session) {
   early_bird <- reactive({
     course_id_value <- "28301"
     user_id_value <- cachedUserData()
-    assignment_ids <- c(127733, 127729, 127735, 131000, 131001, 131002)
+    assignment_ids <- c(127709, 127727)
     
     early_count <- 0
     
@@ -326,7 +327,7 @@ server <- function(input, output, session) {
       }
     }
     
-    # Return TRUE if at least 3 early submissions
+    # Return TRUE if at least 1 early submissions
     early_count >= 1
   })
   
@@ -405,77 +406,7 @@ server <- function(input, output, session) {
       tags$li(HTML(paste0(as.character(display_title), due_text)))
     })
     
-    tags$ul(quiz_list)
-  })
-  
-  
-  output$todo <- renderUI({
-    course_id_value <- "28301"
-    user_id_value <- cachedUserData()
-  
-    quizzes_with_status <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_quizzes")) %>%
-      filter(course_id == course_id_value, !is.na(due_at)) %>%
-      select(title, due_at, assignment_id) %>%
-      left_join(
-        tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_quiz_submissions")) %>%
-          filter(user_id == user_id_value) %>%
-          select(quiz_id, quiz_title),
-        by = c("assignment_id" = "quiz_id")
-      ) %>%
-      arrange(due_at) %>%
-      collect()
-    
-    if(!exists("checkbox_states", envir = .GlobalEnv)) {
-      checkbox_states <<- reactiveValues()
-    }
-    
-    
-    # Create UI elements for each assignment
-    quiz_ui_list <- lapply(seq_len(nrow(quizzes_with_status)), function(i) {
-      row <- quizzes_with_status[i, ]
-      aid <- as.character(row$assignment_id)
-      
-      # Initialize checkbox state if not yet set
-      if (is.null(checkbox_states[[aid]])) {
-        checkbox_states[[aid]] <- !is.na(row$assignment_title)
-      }
-      
-      # Apply strikethrough conditionally
-      title_display <- if (checkbox_states[[aid]]) {
-        paste0("<span style='text-decoration: line-through;'>", row$title, "</span>")
-      } else {
-        row$title
-      }
-      
-      # Create checkbox + label
-      fluidRow(
-        column(1,
-               checkboxInput(inputId = paste0("checkbox_", aid),
-                             label = NULL,
-                             value = checkbox_states[[aid]])),
-        column(11,
-               HTML(paste0("<div>", title_display, " (Due: ", row$due_at, ")</div>"))
-        )
-      )
-    })
-    
-    # Return all quiz UI components
-    div(
-      style = "max-height: 300px; overflow-y: auto; padding-right: 10px;",
-      do.call(tagList, quiz_ui_list)
-    )
-  })
-  
-  # Update checkbox_states when any checkbox is clicked
-  observe({
-    isolate({
-      for (aid in names(checkbox_states)) {
-        input_id <- paste0("checkbox_", aid)
-        if (!is.null(input[[input_id]])) {
-          checkbox_states[[aid]] <- input[[input_id]]
-        }
-      }
-    })
+    tags$ul(style = "font-size: 14px", quiz_list)
   })
   
   #Avatar section functionalities
