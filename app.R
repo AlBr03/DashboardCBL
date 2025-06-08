@@ -162,6 +162,38 @@ server <- function(input, output, session) {
     })
   })
   
+  
+  # helper for avatar:
+  compose_avatar <- function(b1, b2, b3, b4, b5, out_path) {
+    # read base at 250×250
+    img <- image_read_svg("www/avatars/avatar.svg", width = 250, height = 250)
+    
+    if (b1) img <- image_composite(img,
+                                   image_read_svg("www/avatars/avatar_1.svg", width=250, height=250),
+                                   offset = "+0+0")
+    if (b2) img <- image_composite(img,
+                                   image_read_svg("www/avatars/avatar_2.svg", width=250, height=250),
+                                   offset = "+0+0")
+    if (b3) img <- image_composite(img,
+                                   image_read_svg("www/avatars/avatar_3.svg", width=250, height=250),
+                                   offset = "+0+0")
+    if (b4) img <- image_composite(img,
+                                   image_read_svg("www/avatars/avatar_4.svg", width=250, height=250),
+                                   offset = "+0+0")
+    if (b5) img <- image_composite(img,
+                                   image_read_svg("www/avatars/avatar_5.svg", width=250, height=250),
+                                   offset = "+0+0")
+    
+    dir.create(dirname(out_path), recursive = TRUE, showWarnings = FALSE)
+    image_write(img, out_path)
+    out_path
+  }
+  
+  
+  
+  
+  
+  
   output$display <- renderText({
     paste("Current Course ID:", course_id)
   })
@@ -353,6 +385,67 @@ server <- function(input, output, session) {
   })
   
   
+  
+  # Draft for  engagement_badge function
+  #engagement_badge <- function(sc, course_id_value = 28301, user_id_value) {
+  #  if (is.null(user_id_value)) {
+  #    return(FALSE)
+  #  }
+  
+  #  weblogs_tbl <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_web_logs"))
+  
+  #  user_totals <- weblogs_tbl %>%
+  #    filter(course_id == course_id_value) %>%
+  #    group_by(user_id) %>%
+  #    summarise(total_active = sum(total_active_seconds, na.rm = TRUE)) %>%
+  #    collect()
+  
+  #  if (nrow(user_totals) == 0) {
+  #    return(FALSE)
+  #  }
+  
+  #  threshold <- quantile(user_totals$total_active, 0.75, na.rm = TRUE)
+  
+  #  this_user_total <- user_totals %>%
+  #    filter(user_id == user_id_value) %>%
+  #    pull(total_active)
+  
+  #  if (length(this_user_total) == 0) {
+  #    this_user_total <- 0
+  #  }
+  
+  #  return(this_user_total >= threshold)
+  #}
+  
+  
+  # Draft for conversation_badge function
+  #conversation_badge <- function(sc, course_id_value = 28301, user_id_value) {
+  #  if (is.null(user_id_value)) {
+  #    return(FALSE)
+  #  }
+  
+  #  disc_tbl <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_discussion_entries"))
+  
+  #  has_post <- disc_tbl %>%
+  #    filter(course_id == course_id_value, user_id == user_id_value) %>%
+  #    summarise(n_posts = n()) %>%
+  #    collect()
+  
+  #  if (nrow(has_post) == 0) {
+  #    return(FALSE)
+  #  }
+  
+  #  return(has_post$n_posts > 0)
+  #}
+  
+  
+  
+  
+  
+  
+  
+  
+  
   #draft for todo list
   output$todoV2 <- renderUI({
     course_id_value <- "28301"
@@ -411,13 +504,43 @@ server <- function(input, output, session) {
   
   #Avatar section functionalities
   output$avatar <- renderUI({
+    req(cachedUserData())
+    uid <- cachedUserData()
+    
+    # compute badge flags
+    b1 <- scored_high()
+    b2 <- FALSE
+    b3 <- early_bird()
+    b4 <- quiz_star()
+    b5 <- FALSE
+    
+    # compose the avatar PNG
+    out_png <- compose_avatar(
+      b1, b2, b3, b4, b5,
+      file.path("www/avatars", paste0("avatar_user_", uid, ".png"))
+    )
+    
+    # return a DIV containing both the <img> and the badges row
     tags$div(
-      style = "display: flex; gap: 20px; align-items: center;",
-      render_badge("www/Images/1.png", show_active = scored_high(), badge_name = "quiz"),
-      render_badge("www/Images/2.png", show_active = FALSE, badge_name = "engagement"),
-      render_badge("www/Images/3.png", show_active = early_bird(), badge_name = "earlybird"),
-      render_badge("www/Images/4.png", show_active = quiz_star(), badge_name = "practice"),
-      render_badge("www/Images/5.png", show_active = FALSE, badge_name = "conversation")
+      style = "display: flex; flex-direction: column; align-items: center;",
+      
+      # the avatar image
+      tags$img(
+        src    = sub("^www/", "", out_png),
+        height = "250px",
+        width  = "250px",
+        style  = "margin-bottom: 15px;"
+      ),
+      
+      # the badges underneath
+      tags$div(
+        style = "display: flex; gap: 20px; align-items: center;",
+        render_badge("www/Images/1.png", show_active = b1, badge_name = "quiz"),
+        render_badge("www/Images/2.png", show_active = b2, badge_name = "engagement"),
+        render_badge("www/Images/3.png", show_active = b3, badge_name = "earlybird"),
+        render_badge("www/Images/4.png", show_active = b4, badge_name = "practice"),
+        render_badge("www/Images/5.png", show_active = b5, badge_name = "conversation")
+      )
     )
   })
   
