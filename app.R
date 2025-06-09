@@ -115,8 +115,8 @@ server <- function(input, output, session) {
     badges <- list(
       list(label = "Collect badges to earn cool accessories for your avatar"),
       list(img = "Images/1.png", label = "Achieve this badge by scoring more than 20 points over the graded quizzes!"),
-      list(img = "Images/2.png", label = "Achieve this badge by completing at least one of the workshop preparations (more than) a day before the deadline!"),
-      list(img = "Images/3.png", label = "Achieve this badge by submitting x of your quizzes a day early!"),
+      list(img = "Images/2.png", label = "Achieve this badge by being more active on canvas than 75% of students"),
+      list(img = "Images/3.png", label = "Achieve this badge by completing at least one of the workshop preparations (more than) a day before the deadline!"),
       list(img = "Images/4.png", label = "Achieve this badge by completing all the practice quizzes!"),
       list(img = "Images/5.png", label = "Achieve this badge by starting a conversation!")
     )
@@ -348,15 +348,11 @@ server <- function(input, output, session) {
       select(assignment_id, submitted_at_anonymous) %>%
       collect()
     
-    print(paste("Collected submissions:", nrow(all_submissions)))
-    
     # Step 2: Collect all assignment due dates
     all_due_dates <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_assignments")) %>%
       filter(course_id == course_id_value, id %in% assignment_ids) %>%
       select(id, due_at) %>%
       collect()
-    
-    print(paste("Collected due dates:", nrow(all_due_dates)))
     
     # Defensive: if either is empty, no early submission possible
     if (nrow(all_submissions) == 0 || nrow(all_due_dates) == 0) return(FALSE)
@@ -374,16 +370,6 @@ server <- function(input, output, session) {
     # Step 4: Check if any submission is exactly 1 day before due date
     merged$submitted_date <- as.Date(merged$submitted_at_anonymous)
     merged$due_date <- as.Date(merged$due_at)
-    
-    # Print for debugging
-    for (i in seq_len(nrow(merged))) {
-      print(paste0(
-        "Assignment: ", merged$assignment_id[i],
-        " Submitted: ", merged$submitted_date[i],
-        " Due: ", merged$due_date[i],
-        " Diff (days): ", as.numeric(merged$due_date[i] - merged$submitted_date[i])
-      ))
-    }
     
     # Count how many submissions were 1 day early
     early_count <- sum((merged$due_date - merged$submitted_date) == 1, na.rm = TRUE)
@@ -441,63 +427,76 @@ server <- function(input, output, session) {
   
   
   # Draft for  engagement_badge function
-  #engagement_badge <- function(sc, course_id_value = 28301, user_id_value) {
-  #  if (is.null(user_id_value)) {
-  #    return(FALSE)
-  #  }
-  
-  #  weblogs_tbl <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_web_logs"))
-  
-  #  user_totals <- weblogs_tbl %>%
-  #    filter(course_id == course_id_value) %>%
-  #    group_by(user_id) %>%
-  #    summarise(total_active = sum(total_active_seconds, na.rm = TRUE)) %>%
-  #    collect()
-  
-  #  if (nrow(user_totals) == 0) {
-  #    return(FALSE)
-  #  }
-  
-  #  threshold <- quantile(user_totals$total_active, 0.75, na.rm = TRUE)
-  
-  #  this_user_total <- user_totals %>%
-  #    filter(user_id == user_id_value) %>%
-  #    pull(total_active)
-  
-  #  if (length(this_user_total) == 0) {
-  #    this_user_total <- 0
-  #  }
-  
-  #  return(this_user_total >= threshold)
-  #}
+  engagement_badge <- reactive({
+    user_id_value <- cachedUserData()
+    
+    if (is.null(user_id_value)) {
+      print("DEBUG: user_id_value is NULL, returning FALSE")
+      return(FALSE)
+    }
+    
+    weblogs_tbl <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_enrollments"))
+    
+    user_totals <- weblogs_tbl %>%
+      filter(course_id == 28301) %>%
+      group_by(user_id) %>%
+      summarise(total_active = sum(total_active_seconds, na.rm = TRUE)) %>%
+      collect()
+    
+    if (nrow(user_totals) == 0) {
+      #print("DEBUG: user_totals has zero rows, returning FALSE")
+      return(FALSE)
+    }
+    
+    threshold <- quantile(user_totals$total_active, 0.75, na.rm = TRUE)
+    #print(paste0("DEBUG: threshold (75th percentile) = ", threshold))
+    
+    this_user_total <- user_totals %>%
+      filter(user_id == user_id_value) %>%
+      pull(total_active)
+    #print(paste0("DEBUG: this_user_total = ", ifelse(length(this_user_total)==0, "0", this_user_total)))
+    
+    if (length(this_user_total) == 0) {
+      this_user_total <- 0
+    }
+    
+    result <- this_user_total >= threshold
+    #print(paste0("DEBUG: result = ", result))
+    
+    return(result)
+  })
   
   
   # Draft for conversation_badge function
-  #conversation_badge <- function(sc, course_id_value = 28301, user_id_value) {
-  #  if (is.null(user_id_value)) {
-  #    return(FALSE)
-  #  }
-  
-  #  disc_tbl <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_discussion_entries"))
-  
-  #  has_post <- disc_tbl %>%
-  #    filter(course_id == course_id_value, user_id == user_id_value) %>%
-  #    summarise(n_posts = n()) %>%
-  #    collect()
-  
-  #  if (nrow(has_post) == 0) {
-  #    return(FALSE)
-  #  }
-  
-  #  return(has_post$n_posts > 0)
-  #}
-  
-  
-  
-  
-  
-  
-  
+  conversation_badge <- reactive({
+    course_id_value <- 28301
+    user_id_value <- cachedUserData()
+    
+    if (is.null(user_id_value)) {
+      print("User ID is NULL — returning FALSE.")
+      return(FALSE)
+    }
+    
+    # Step 1: Query the database
+    user_posts <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_discussion_entries")) %>%
+      filter(course_id == course_id_value, user_id == user_id_value) %>%
+      summarise(n_posts = n()) %>%
+      collect()
+    
+    #print(user_posts)
+    
+    # Step 2: Defensive check
+    if (nrow(user_posts) == 0 || is.na(user_posts$n_posts)) {
+      print("No posts found or n_posts is NA — returning FALSE.")
+      return(FALSE)
+    }
+    
+    # Step 3: Evaluate result
+    result <- user_posts$n_posts > 0
+    #print(paste("Number of posts:", user_posts$n_posts, "=> Badge earned?", result))
+    
+    return(result)
+  })
   
   
   #draft for todo list
@@ -563,10 +562,10 @@ server <- function(input, output, session) {
     
     # compute badge flags
     b1 <- scored_high()
-    b2 <- FALSE
+    b2 <- engagement_badge()
     b3 <- early_bird()
     b4 <- quiz_star()
-    b5 <- FALSE
+    b5 <- conversation_badge()
     
     # compose the avatar PNG
     out_png <- compose_avatar(
