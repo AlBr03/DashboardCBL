@@ -210,14 +210,29 @@ server <- function(input, output, session) {
   })
 
   
-  # line graph of grades ##TODO: sort by due date and normalize to a grade from 0-10
+  # line graph of grades
   output$lineChart <- renderPlotly({
     user_id_value <- cachedUserData()
     course_id_value <- "28301"
     
     if (is.null(user_id_value)) return(NULL)
     
-    # Fetch scores and timestamps
+    # Step 1: Get all user scores for the course to compute min/max per quiz
+    all_scores <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_quiz_submissions")) %>%
+      filter(course_id == course_id_value) %>%
+      filter(!quiz_id %in% c(26608, 26581)) %>%
+      select(quiz_id, quiz_title, score_anonymous) %>%
+      collect()
+    
+    quiz_ranges <- all_scores %>%
+      group_by(quiz_id, quiz_title) %>%
+      summarise(
+        quiz_min = min(score_anonymous, na.rm = TRUE),
+        quiz_max = max(score_anonymous, na.rm = TRUE),
+        .groups = "drop"
+      )
+    
+    # Step 2: Get scores for the selected user
     user_scores <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_quiz_submissions")) %>%
       filter(user_id == user_id_value, course_id == course_id_value) %>%
       filter(!quiz_id %in% c(26608, 26581)) %>%
@@ -228,36 +243,34 @@ server <- function(input, output, session) {
         by = c("quiz_title" = "title")
       ) %>%
       collect() %>%
-      group_by(quiz_id, quiz_title, due_at, finished_at_anonymous) %>%
-      summarise(score_anonymous = max(score_anonymous, na.rm = TRUE), .groups = "drop") %>%
-      arrange(finished_at_anonymous)
+      group_by(quiz_id, quiz_title, due_at) %>%
+      summarise(
+        score_anonymous = max(score_anonymous, na.rm = TRUE),
+        finished_at = max(finished_at_anonymous, na.rm = TRUE),
+        .groups = "drop"
+      )
     
     if (nrow(user_scores) == 0 || all(is.na(user_scores$score_anonymous))) {
       return(NULL)
     }
     
-    # Normalize scores to 0–10
-    user_scores$score_anonymous <- as.numeric(user_scores$score_anonymous)
-    valid_scores <- user_scores %>% filter(!is.na(score_anonymous))
-    
-    min_score <- min(valid_scores$score_anonymous, na.rm = TRUE)
-    max_score <- max(valid_scores$score_anonymous, na.rm = TRUE)
-    
-    if (min_score == max_score) {
-      user_scores$normalized_score <- 10
-    } else {
-      user_scores$normalized_score <- round(
-        (user_scores$score_anonymous - min_score) /
-          (max_score - min_score) * 10, 1
-      )
-    }
-    
-    # Sort x-axis by finished_at_anonymous
+    # Step 3: Join quiz min/max and normalize per quiz
     user_scores <- user_scores %>%
-      arrange(finished_at_anonymous) %>%
+      left_join(quiz_ranges, by = c("quiz_id", "quiz_title")) %>%
+      mutate(
+        normalized_score = case_when(
+          is.na(score_anonymous) ~ NA_real_,
+          quiz_max == quiz_min ~ 10,  # Avoid division by zero
+          TRUE ~ round((score_anonymous - quiz_min) / (quiz_max - quiz_min) * 10, 1)
+        )
+      )
+    
+    # Step 4: Arrange and prepare for plotting
+    user_scores <- user_scores %>%
+      arrange(finished_at) %>%
       mutate(quiz_title = factor(quiz_title, levels = unique(quiz_title)))
     
-    # Plot
+    # Step 5: Plot
     plot_ly(
       data = user_scores,
       x = ~quiz_title,
@@ -269,13 +282,10 @@ server <- function(input, output, session) {
     ) %>%
       layout(
         title = "Normalized Quiz Scores Over Time",
-        yaxis = list(title = "Normalized Score (0–10)", rangemode = "tozero")
+        yaxis = list(title = "Normalized Score (0–10)", rangemode = "tozero"),
+        xaxis = list(title = "Quiz Title", tickangle = -45)
       )
   })
-  
-  
-  
-  
   
 
   # Output: pie chart of quiz progression
@@ -326,63 +336,107 @@ server <- function(input, output, session) {
   
   # Draft for early bird badge
   early_bird <- reactive({
-    course_id_value <- "28301"
+    course_id_value <- 28301
     user_id_value <- cachedUserData()
     assignment_ids <- c(127709, 127727)
     
-    early_count <- 0
+    if (is.null(user_id_value)) return(FALSE)
     
-    for (assignment_id in assignment_ids) {
-      # Get submitted time
-      submitted <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_submissions")) %>%
-        filter(course_id == course_id_value, user_id == user_id_value, assignment_id == assignment_id) %>%
-        select(submitted_at_anonymous) %>%
-        head(1) %>%
-        collect()
-      
-      # Get due time
-      due <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_quizzes")) %>%
-        filter(course_id == course_id_value, assignment_id == assignment_id) %>%
-        select(due_at) %>%
-        head(1) %>%
-        collect()
-      
-      if (nrow(submitted) > 0 && nrow(due) > 0) {
-        submitted_date <- as.Date(submitted$submitted_at_anonymous)
-        due_date <- as.Date(due$due_at)
-        
-        if (!is.na(submitted_date) && !is.na(due_date)) {
-          if (submitted_date == (due_date - 1)) {
-            early_count <- early_count + 1
-          }
-        }
-      }
+    # Step 1: Collect all submissions for these assignments
+    all_submissions <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_submissions")) %>%
+      filter(course_id == course_id_value, user_id == user_id_value, assignment_id %in% assignment_ids) %>%
+      select(assignment_id, submitted_at_anonymous) %>%
+      collect()
+    
+    print(paste("Collected submissions:", nrow(all_submissions)))
+    
+    # Step 2: Collect all assignment due dates
+    all_due_dates <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_assignments")) %>%
+      filter(course_id == course_id_value, id %in% assignment_ids) %>%
+      select(id, due_at) %>%
+      collect()
+    
+    print(paste("Collected due dates:", nrow(all_due_dates)))
+    
+    # Defensive: if either is empty, no early submission possible
+    if (nrow(all_submissions) == 0 || nrow(all_due_dates) == 0) return(FALSE)
+    
+    # Step 3: Merge submissions and due dates by assignment_id
+    merged <- base::merge(
+      all_submissions,
+      all_due_dates,
+      by.x = "assignment_id",
+      by.y = "id",
+      all.x = TRUE
+    )
+    
+    
+    # Step 4: Check if any submission is exactly 1 day before due date
+    merged$submitted_date <- as.Date(merged$submitted_at_anonymous)
+    merged$due_date <- as.Date(merged$due_at)
+    
+    # Print for debugging
+    for (i in seq_len(nrow(merged))) {
+      print(paste0(
+        "Assignment: ", merged$assignment_id[i],
+        " Submitted: ", merged$submitted_date[i],
+        " Due: ", merged$due_date[i],
+        " Diff (days): ", as.numeric(merged$due_date[i] - merged$submitted_date[i])
+      ))
     }
     
-    # Return TRUE if at least 1 early submissions
-    early_count >= 1
+    # Count how many submissions were 1 day early
+    early_count <- sum((merged$due_date - merged$submitted_date) == 1, na.rm = TRUE)
+    
+    return(early_count >= 1)
   })
+  
+  
   
   
   
   #draft for quiz master badge
   scored_high <- reactive({
-    course_id_value <- "28301"
+    course_id_value <- 28301
     user_id_value <- cachedUserData()
     
+    if (is.null(user_id_value)) return(FALSE)
+    
+    # Quizzes of interest
     score_ids <- c(26615, 26610, 26617, 27282, 27283, 27284)
     
-    scores <- lapply(score_ids, function(quiz_id) {
-      result <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_quiz_submissions")) %>%
-        filter(course_id == course_id_value, user_id == user_id_value, quiz_id == quiz_id) %>%
-        select(score_anonymous) %>%
-        head(1) %>%
-        collect()
-      if (nrow(result) > 0) result$score_anonymous else 0
-    })
+    # Step 1: Pull all submissions for the user in this course
+    user_scores <- tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_quiz_submissions")) %>%
+      filter(user_id == user_id_value, course_id == course_id_value) %>%
+      filter(quiz_id %in% score_ids) %>%
+      select(quiz_id, quiz_title, score_anonymous, finished_at_anonymous) %>%
+      left_join(
+        tbl(sc, in_schema("sandbox_la_conijn_CBL", "silver_canvas_quizzes")) %>%
+          select(title, due_at),
+        by = c("quiz_title" = "title")
+      ) %>%
+      collect() %>%
+      group_by(quiz_id, quiz_title, due_at) %>%
+      summarise(
+        score_anonymous = max(score_anonymous, na.rm = TRUE),
+        finished_at = max(finished_at_anonymous, na.rm = TRUE),
+        .groups = "drop"
+      )
     
-    sum(unlist(scores)) >= 20
+    # Step 2: Defensive check
+    if (nrow(user_scores) == 0 || all(is.na(user_scores$score_anonymous))) {
+      return(FALSE)
+    }
+    
+    # Step 3: Sum scores across selected quizzes
+    total_score <- sum(user_scores$score_anonymous, na.rm = TRUE)
+    #print(paste("Total score across selected quizzes:", total_score))
+    
+    return(total_score >= 20)
   })
+  
+  
+  
   
   
   
