@@ -115,7 +115,7 @@ server <- function(input, output, session) {
     badges <- list(
       list(label = "Collect badges to earn cool accessories for your avatar"),
       list(img = "Images/1.png", label = "Achieve this badge by scoring more than 20 points over the graded quizzes!"),
-      list(img = "Images/2.png", label = "Achieve this badge by being more active on canvas than 75% of students"),
+      list(img = "Images/2.png", label = "Achieve this badge by being more active on canvas than 65% of students"),
       list(img = "Images/3.png", label = "Achieve this badge by completing at least one of the workshop preparations (more than) a day before the deadline!"),
       list(img = "Images/4.png", label = "Achieve this badge by completing all the practice quizzes!"),
       list(img = "Images/5.png", label = "Achieve this badge by starting a conversation!")
@@ -448,8 +448,8 @@ server <- function(input, output, session) {
       return(FALSE)
     }
     
-    threshold <- quantile(user_totals$total_active, 0.75, na.rm = TRUE)
-    #print(paste0("DEBUG: threshold (75th percentile) = ", threshold))
+    threshold <- quantile(user_totals$total_active, 0.65, na.rm = TRUE)
+    #print(paste0("DEBUG: threshold (65th percentile) = ", threshold))
     
     this_user_total <- user_totals %>%
       filter(user_id == user_id_value) %>%
