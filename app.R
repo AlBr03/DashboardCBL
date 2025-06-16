@@ -277,8 +277,8 @@ server <- function(input, output, session) {
       y = ~normalized_score,
       type = 'scatter',
       mode = 'lines+markers',
-      line = list(shape = "linear"),
-      marker = list(size = 8)
+      line = list(shape = "linear", color = "#F6CE8F"),
+      marker = list(size = 8, color = "#74A2E7")
     ) %>%
       layout(
         title = "Normalized Quiz Scores Over Time",
@@ -311,7 +311,7 @@ server <- function(input, output, session) {
       labels = c("Completed", "To Do"),
       values = c(done, todo),
       type = "pie",
-      marker = list(colors = c("green", "red"))
+      marker = list(colors = c("#74A2E7", "#F6CE8F"))
     ) %>% layout(title = "Quiz Progress")
   })
   
