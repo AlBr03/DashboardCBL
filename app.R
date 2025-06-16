@@ -5,6 +5,7 @@ library(ggplot2)
 library(plotly)
 library(bslib)
 library(magick)
+library(rsvg)
 
 # Cached reactive values
 cachedUserData <- reactiveVal(NULL)
