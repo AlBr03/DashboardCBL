@@ -97,13 +97,13 @@ ui <- fluidPage(
     column(4,
            card(
              card_header("📊 Quiz Completion Progress"),
-             plotlyOutput("pieChart", height = "300px")
+             plotlyOutput("pieChart", height = "400px")
            )
     ),
     column(4,
            card(
              card_header("📊 Grade overview"),
-             plotlyOutput("lineChart", height = "300px")
+             plotlyOutput("lineChart", height = "400px")
            )
     ),
     column(4,
