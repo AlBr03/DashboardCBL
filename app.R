@@ -77,15 +77,21 @@ ui <- fluidPage(
     column(7,
            card(
              card_header("📝 To-Do List (Quizzes with Due Dates)"),
-             uiOutput("todoV2")
+             div(
+               style = "max-height: 400px; overflow-y: auto;",
+               uiOutput("todoV2")
+             )
            )
+           
     ),
     column(5,
            card(
              card_header("👤 Personal Avatar"),
-             uiOutput("avatar")
-           )
-    )
+             div(
+               style = "max-height: 400px; overflow-y: auto;", 
+               uiOutput("avatar")
+               )
+    ))
   ),
   fluidRow(
     column(4,
@@ -114,11 +120,11 @@ server <- function(input, output, session) {
   output$badge_list <- renderUI({
     badges <- list(
       list(label = "Collect badges to earn cool accessories for your avatar"),
-      list(img = "Images/1.png", label = "Achieve this badge by scoring more than 20 points over the graded quizzes!"),
-      list(img = "Images/2.png", label = "Achieve this badge by being more active on canvas than 65% of students"),
-      list(img = "Images/3.png", label = "Achieve this badge by completing at least one of the workshop preparations (more than) a day before the deadline!"),
-      list(img = "Images/4.png", label = "Achieve this badge by completing all the practice quizzes!"),
-      list(img = "Images/5.png", label = "Achieve this badge by starting a conversation!")
+      list(img = "Images/1.png", label = "Quiz Master: Achieve this badge by scoring more than 20 points over the graded quizzes!"),
+      list(img = "Images/2.png", label = "Steady Engagement: Achieve this badge by being more active on canvas than 65% of students"),
+      list(img = "Images/3.png", label = "Early Bird: Achieve this badge by completing at least one of the workshop preparations (more than) a day before the deadline!"),
+      list(img = "Images/4.png", label = "Practice Pro: Achieve this badge by completing all the practice quizzes!"),
+      list(img = "Images/5.png", label = "Conversation Starter: Achieve this badge by starting a conversation!")
     )
     
     tagList(
@@ -165,23 +171,25 @@ server <- function(input, output, session) {
   
   # helper for avatar:
   compose_avatar <- function(b1, b2, b3, b4, b5, out_path) {
+    width = 220
+    height = 220
     # read base at 250×250
-    img <- image_read_svg("www/avatars/avatar.svg", width = 250, height = 250)
+    img <- image_read_svg("www/avatars/avatar.svg", width = width, height = height)
     
     if (b1) img <- image_composite(img,
-                                   image_read_svg("www/avatars/avatar_1.svg", width=250, height=250),
+                                   image_read_svg("www/avatars/avatar_1.svg", width=width, height=height),
                                    offset = "+0+0")
     if (b2) img <- image_composite(img,
-                                   image_read_svg("www/avatars/avatar_2.svg", width=250, height=250),
+                                   image_read_svg("www/avatars/avatar_2.svg", width=width, height=height),
                                    offset = "+0+0")
     if (b3) img <- image_composite(img,
-                                   image_read_svg("www/avatars/avatar_3.svg", width=250, height=250),
+                                   image_read_svg("www/avatars/avatar_3.svg", width=width, height=height),
                                    offset = "+0+0")
     if (b4) img <- image_composite(img,
-                                   image_read_svg("www/avatars/avatar_4.svg", width=250, height=250),
+                                   image_read_svg("www/avatars/avatar_4.svg", width=width, height=height),
                                    offset = "+0+0")
     if (b5) img <- image_composite(img,
-                                   image_read_svg("www/avatars/avatar_5.svg", width=250, height=250),
+                                   image_read_svg("www/avatars/avatar_5.svg", width=width, height=height),
                                    offset = "+0+0")
     
     dir.create(dirname(out_path), recursive = TRUE, showWarnings = FALSE)
@@ -536,23 +544,21 @@ server <- function(input, output, session) {
       title <- quizzes_with_due$quiz_title[i]
       due <- quizzes_with_due$due_at[i]
       
-      # Check if user completed this quiz (by matching title)
       completed <- title %in% completed_titles
       
-      # Format due date
       due_text <- if (!is.na(due)) {
-        paste(" (Due:", format(as.POSIXct(due, tz = "UTC"), "%b %d, %Y %H:%M"), ")")
+        format(as.POSIXct(due, tz = "UTC"), "%b %d, %Y %H:%M")
       } else {
-        " (No due date)"
+        "No due date"
       }
       
-      # Strike through if completed
       display_title <- if (completed) tags$s(title) else title
+      due_text <- if (completed) tags$s(due_text) else due_text
       
-      tags$li(HTML(paste0(as.character(display_title), due_text)))
+      tags$li(style = "display: flex; justify-content: space-between; margin: 0; padding: 0;",
+              tags$span(display_title),
+              tags$span(due_text))
     })
-    
-    tags$ul(style = "font-size: 14px", quiz_list)
   })
   
   #Avatar section functionalities
@@ -580,8 +586,8 @@ server <- function(input, output, session) {
       # the avatar image
       tags$img(
         src    = sub("^www/", "", out_png),
-        height = "250px",
-        width  = "250px",
+        height = "220px",
+        width  = "220px",
         style  = "margin-bottom: 15px;"
       ),
       
