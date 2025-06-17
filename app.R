@@ -580,21 +580,33 @@ server <- function(input, output, session) {
       file.path("www/avatars", paste0("avatar_user_", uid, ".png"))
     )
     
-    # return a DIV containing both the <img> and the badges row
+    # return a DIV containing the layout
     tags$div(
       style = "display: flex; flex-direction: column; align-items: center;",
       
-      # the avatar image
-      tags$img(
-        src    = sub("^www/", "", out_png),
-        height = "220px",
-        width  = "220px",
-        style  = "margin-bottom: 15px;"
+      # flex row: text + avatar
+      tags$div(
+        style = "display: flex; flex-direction: row; align-items: center; gap: 20px;",
+        
+        # LEFT: the text
+        tags$div(
+          style = "max-width: 250px; text-align: left;",
+          tags$p("The avatar shown on the right is your personal avatar! Based on the badges you have unlocked,
+                 the avatar will gain special accessories. Have fun learning and collecting the badges!")
+        ),
+        
+        # CENTER: the avatar image
+        tags$img(
+          src    = sub("^www/", "", out_png),
+          height = "220px",
+          width  = "220px",
+          style  = "margin-bottom: 15px;"
+        )
       ),
       
       # the badges underneath
       tags$div(
-        style = "display: flex; gap: 20px; align-items: center;",
+        style = "display: flex; gap: 20px; align-items: center; margin-top: 15px;",
         render_badge("www/Images/1.png", show_active = b1, badge_name = "quiz"),
         render_badge("www/Images/2.png", show_active = b2, badge_name = "engagement"),
         render_badge("www/Images/3.png", show_active = b3, badge_name = "earlybird"),
@@ -603,6 +615,7 @@ server <- function(input, output, session) {
       )
     )
   })
+  
   
   
 }
