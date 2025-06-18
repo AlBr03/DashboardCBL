@@ -45,15 +45,22 @@ total_quizzes <- quizzes %>%
   group_by(course_id) %>%
   summarise(nr_quizzes = n())
 
+# Define the quiz IDs you want to include
+selected_quiz_ids <- c("26585", "26594", "26596", "26584", "26618")  # Strings if IDs are strings
+
+# Store the count of selected quizzes in a scalar
+nr_selected_quizzes <- length(selected_quiz_ids)
+
+# Process the Spark table with quiz filtering
 quiz_progression <- quizzes %>%
-  inner_join(total_quizzes, by = "course_id") %>%
-  inner_join(submissions, by = c("quiz_id" = "quiz_id", "course_id" = "course_id")) %>%
+  filter(quiz_id %in% selected_quiz_ids) %>%
+  inner_join(submissions, by = c("quiz_id", "course_id")) %>%
   group_by(course_id, user_id) %>%
   summarise(
     nr_submissions = n_distinct(quiz_id),
-    nr_quizzes = max(nr_quizzes),
     .groups = "drop"
-  )
+  ) %>%
+  mutate(nr_quizzes = !!nr_selected_quizzes)  # Add the value after summarise
 
 weblogs_chart <- weblogs %>%
   mutate(
@@ -297,7 +304,7 @@ server <- function(input, output, session) {
   })
   
 
-  # Output: pie chart of quiz progression
+  # Render the pie chart in your Shiny output
   output$pieChart <- renderPlotly({
     user_id_value <- cachedUserData()
     course_id_value <- course_id
@@ -309,8 +316,7 @@ server <- function(input, output, session) {
       collect()
     
     if (nrow(result1) == 0) {
-      # Return a plotly message (make sure you handle non-plot output separately)
-      return(NULL)  # Return NULL to show no plot
+      return(NULL)  # No data to display
     }
     
     done <- result1$nr_submissions
